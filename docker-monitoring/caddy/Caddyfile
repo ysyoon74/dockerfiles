@@ -1,0 +1,36 @@
+:9090 {
+    basicauth /* {
+        {$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+    }
+    reverse_proxy prometheus_#IP#:9090
+}
+
+:9093 {
+    basicauth /* {
+        {$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+    }
+    reverse_proxy alertmanager_#IP#:9093
+}
+
+:9091 {
+    basicauth /* {
+        {$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+    }
+    reverse_proxy pushgateway_#IP#:9091
+}
+
+:3000 {
+    reverse_proxy grafana_#IP#:3000 {
+			header_down Access-Control-Allow-Origin "*"
+			header_down Access-Control-Allow-Headers "*"
+			header_down Access-Control-Allow-Methods "GET POST PUT OPTIONS"
+			header_down Access-Control-Allow-Credentials true
+    }
+}
+
+:8080 {
+    basicauth /* {
+        {$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+    }
+    reverse_proxy cadvisor_#IP#:8080
+}

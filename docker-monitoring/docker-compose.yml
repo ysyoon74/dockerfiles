@@ -1,0 +1,164 @@
+version: '3.9'
+
+networks:
+  monitor-net:
+    driver: bridge
+
+volumes:
+    prometheus_data: {}
+    grafana_data: {}
+
+services:
+  cadvisor_#IP#:
+    image: gcr.io/cadvisor/cadvisor
+    container_name: cadvisor_#IP#
+    environment:
+      - TZ=Asia/Seoul
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /etc/localtime:/etc/localtime:ro
+    devices:
+      - /dev/kmsg  
+    restart:
+      unless-stopped
+    networks:
+      - monitor-net
+    labels:
+      docker-compose-group: monitoring_#IP#
+  nodeexporter_#IP#:
+    image: prom/node-exporter
+    container_name: nodeexporter_#IP#
+    environment:
+      - TZ=Asia/Seoul
+    command:
+      - '--path.procfs=/host/proc'
+#      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+#      - /:/rootfs:ro
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - monitor-net
+    labels:
+      docker-compose-group: monitoring_#IP#
+    depends_on:
+      - cadvisor_#IP#
+  pushgateway_#IP#:
+    image: prom/pushgateway
+    container_name: pushgateway_#IP#
+    environment:
+      - TZ=Asia/Seoul
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - monitor-net
+    labels:
+      docker-compose-group: monitoring_#IP#
+    depends_on:
+      - nodeexporter_#IP#
+  alertmanager_#IP#:
+    image: prom/alertmanager
+    container_name: alertmanager_#IP#
+    environment:
+      - TZ=Asia/Seoul
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - monitor-net
+    depends_on:
+      - pushgateway_#IP#
+    labels:
+      docker-compose-group: monitoring_#IP#
+  prometheus_#IP#:
+    image: prom/prometheus
+    container_name: prometheus_#IP#
+    environment:
+      - TZ=Asia/Seoul
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+      - /etc/localtime:/etc/localtime:ro
+    restart:
+      unless-stopped
+    networks:
+      - monitor-net
+    labels:
+      docker-compose-group: monitoring_#IP#
+    depends_on:
+      - alertmanager_#IP#
+  grafana_#IP#:
+    image: grafana/grafana
+    container_name: grafana_#IP#
+    environment:
+      - TZ=Asia/Seoul
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=thfxmfnrtm!23
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_USERS_DEFAULT_THEME=light
+      - GF_FEATURE_TOGGLES_ENABLE=ngalert
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=1.224.169.93:25
+      - GF_SMTP_USER=saltlux
+      - GF_SMTP_PASSWORD=thfxmfnrtm!23
+      - GF_SMTP_STARTTLS_POLICY=NoStartTLS
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/notifiers:/etc/grafana/provisioning/notifiers
+      - /etc/localtime:/etc/localtime:ro
+    restart:
+      unless-stopped
+    networks:
+      - monitor-net
+    labels:
+      docker-compose-group: monitoring_#IP#
+    depends_on:
+      - prometheus_#IP#
+  caddy_#IP#:
+    image: caddy
+    container_name: caddy_#IP#
+    ports:
+      - 5300:3000
+      - 5301:9090
+      - 5302:9093
+      - 5303:9091
+      - 5304:8080
+      - 5305:6379
+    environment:
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=thfxmfnrtm!23
+      - ADMIN_PASSWORD_HASH=JDJhJDE0JE91S1FrN0Z0VEsyWmhrQVpON1VzdHVLSDkyWHdsN0xNbEZYdnNIZm1pb2d1blg4Y09mL0ZP
+      - TZ=Asia/Seoul
+    volumes:
+      - ./caddy:/etc/caddy
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    networks:
+      - monitor-net
+    labels:
+      docker-compose-group: monitoring_#IP#
+    depends_on:
+      - grafana_#IP#
